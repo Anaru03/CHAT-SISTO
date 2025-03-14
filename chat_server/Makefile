@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -pthread -I"C:/Program Files (x86)/cJSON/include"
-LIBS = -L"C:/Program Files (x86)/cJSON/lib" -lcjson
+CFLAGS = -Wall -pthread -I/usr/local/include/cjson
+LIBS = -L/usr/local/lib -lcjson
 
 SERVER = server
 CLIENT = client
