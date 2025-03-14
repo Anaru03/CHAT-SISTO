@@ -12,7 +12,7 @@
 int main() {
     int sock;
     struct sockaddr_in server;
-    char message[BUFFER_SIZE], server_reply[BUFFER_SIZE];
+    char message[BUFFER_SIZE];
 
     // Crear socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
