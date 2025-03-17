@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include "cJSON.h"
 
-#define PORT 27523
+#define PORT 50213
 #define BUFFER_SIZE 1024
 
 int main() {
@@ -26,8 +26,10 @@ int main() {
     server.sin_port = htons(PORT);
 
     // Conectar al servidor
-    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
+    int estado = connect(sock, (struct sockaddr *)&server, sizeof(server));
+    if (estado < 0) {
         perror("Error al conectar al servidor");
+        printf("%d\n", estado);
         return 1;
     }
     
