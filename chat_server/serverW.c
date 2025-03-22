@@ -1,18 +1,18 @@
+#include <stdio.h>    
 #ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-#pragma comment(lib, "ws2_32.lib")
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #include <windows.h>
+    #pragma comment(lib, "ws2_32.lib")
 #else
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <pthread.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <unistd.h>
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <pthread.h>
 #endif
 
 #define MAX_CLIENTS 100
@@ -29,9 +29,9 @@ typedef struct {
 Client clients[MAX_CLIENTS];
 int client_count = 0;
 #ifdef _WIN32
-HANDLE clients_mutex = NULL;
+    HANDLE clients_mutex = NULL;
 #else
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 void add_client(Client client) {
@@ -128,7 +128,7 @@ int main(int argc, char *argv[]) {
     }
 
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(port);
 
     if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Servidor ejecutándose en 127.0.0.1:%d\n", port);
+    printf("Servidor ejecutandose en:%d\n", port);
 
     while ((new_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len)) >= 0) {
         printf("Nueva conexión: %s\n", inet_ntoa(client_addr.sin_addr));
