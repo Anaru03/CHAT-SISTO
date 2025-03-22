@@ -109,7 +109,7 @@ int main() {
 
     // Crear JSON para registrar usuario
     cJSON *json = cJSON_CreateObject();
-    cJSON_AddStringToObject(json, "accion", "registrar_usuario");
+    cJSON_AddStringToObject(json, "accion", "REGISTRO");
     cJSON_AddStringToObject(json, "usuario", username);
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
