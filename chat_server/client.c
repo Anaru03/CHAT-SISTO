@@ -91,7 +91,7 @@ int main() {
         return 1;
     }
 
-    server.sin_addr.s_addr = inet_addr("192.168.1.119");  // Dirección IP del servidor
+    server.sin_addr.s_addr = inet_addr("192.168.229.71");  // Dirección IP del servidor
     server.sin_family = AF_INET;
     server.sin_port = htons(PORT);
 
