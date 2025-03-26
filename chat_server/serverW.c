@@ -47,7 +47,7 @@ void add_client(Client client) {
     if (client_count < MAX_CLIENTS) {
         clients[client_count++] = client;
     } else {
-        fprintf(stderr, "Se alcanzó el máximo de clientes.\n");
+        fprintf(stderr, "Se alcanzo el maximo de clientes.\n");
     }
 #ifdef _WIN32
     ReleaseMutex(clients_mutex);
@@ -383,10 +383,10 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Servidor ejecutándose en el puerto: %d\n", port);
+    printf("Servidor ejecutandose en el puerto: %d\n", port);
 
     while ((new_socket = accept(server_socket, (struct sockaddr *)&client_addr, &addr_len)) >= 0) {
-        printf("Nueva conexión desde: %s\n", inet_ntoa(client_addr.sin_addr));
+        printf("Nueva conexion desde: %s\n", inet_ntoa(client_addr.sin_addr));
 #ifdef _WIN32
         HANDLE thread;
         int *new_sock = malloc(sizeof(int));

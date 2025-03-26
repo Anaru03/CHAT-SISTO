@@ -11,49 +11,54 @@
 #define BUFFER_SIZE 1024
 
 int sock;  // Socket global para uso en el hilo de recepción
+char username[BUFFER_SIZE];  // Nombre de usuario global
 
-// Función para enviar un mensaje a un usuario específico o a todos
-void enviar_mensaje(int sock, const char *mensaje, const char *destinatario) {
+// Función para enviar un mensaje (broadcast o directo)
+void enviar_mensaje(const char *mensaje, const char *destinatario) {
     cJSON *json = cJSON_CreateObject();
-    cJSON_AddStringToObject(json, "accion", "enviar_mensaje");
 
-    if (destinatario) {
-        cJSON_AddStringToObject(json, "destinatario", destinatario);
+    if (destinatario == NULL || strlen(destinatario) == 0) {
+        // Mensaje de broadcast
+        cJSON_AddStringToObject(json, "accion", "BROADCAST");
+        cJSON_AddStringToObject(json, "nombre_emisor", username);
+        cJSON_AddStringToObject(json, "mensaje", mensaje);
+    } else {
+        // Mensaje directo (DM)
+        cJSON_AddStringToObject(json, "accion", "DM");
+        cJSON_AddStringToObject(json, "nombre_emisor", username);
+        cJSON_AddStringToObject(json, "nombre_destinatario", destinatario);
+        cJSON_AddStringToObject(json, "mensaje", mensaje);
     }
-    cJSON_AddStringToObject(json, "mensaje", mensaje);
+
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
-    // Enviar mensaje
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al enviar mensaje");
-        free(json_str);
-        return;
     }
 
     free(json_str);
 }
 
 // Función para cambiar el estado del cliente
-void cambiar_estado(int sock, const char *nuevo_estado) {
+void cambiar_estado(const char *nuevo_estado) {
     cJSON *json = cJSON_CreateObject();
-    cJSON_AddStringToObject(json, "accion", "cambiar_estado");
+    cJSON_AddStringToObject(json, "tipo", "ESTADO");
+    cJSON_AddStringToObject(json, "usuario", username);
     cJSON_AddStringToObject(json, "estado", nuevo_estado);
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
-    // Enviar solicitud para cambiar el estado
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al cambiar estado");
-        free(json_str);
-        return;
+    } else {
+        printf("Estado cambiado a: %s\n", nuevo_estado);
     }
 
     free(json_str);
-    printf("Estado cambiado a: %s\n", nuevo_estado);
 }
 
-// Hilo para recibir mensajes en tiempo real
+// Hilo para recibir mensajes
 void *recibir_mensajes(void *arg) {
     char response[BUFFER_SIZE];
 
@@ -61,7 +66,28 @@ void *recibir_mensajes(void *arg) {
         int len = recv(sock, response, sizeof(response) - 1, 0);
         if (len > 0) {
             response[len] = '\0';
-            printf("\n\nMensaje recibido: %s\n", response);
+
+            cJSON *json_response = cJSON_Parse(response);
+            if (!json_response) {
+                printf("\nMensaje recibido (formato incorrecto): %s\n", response);
+            } else {
+                // Se pueden recibir mensajes con diferentes claves, se muestra lo recibido
+                cJSON *accion = cJSON_GetObjectItem(json_response, "accion");
+                cJSON *mensaje = cJSON_GetObjectItem(json_response, "mensaje");
+                cJSON *response_field = cJSON_GetObjectItem(json_response, "response");
+                cJSON *respuesta = cJSON_GetObjectItem(json_response, "respuesta");
+
+                if (accion && cJSON_IsString(accion) && mensaje && cJSON_IsString(mensaje)) {
+                    printf("\n[%s] %s\n", accion->valuestring, mensaje->valuestring);
+                } else if (response_field && cJSON_IsString(response_field)) {
+                    printf("\nRespuesta del servidor: %s\n", response_field->valuestring);
+                } else if (respuesta && cJSON_IsString(respuesta)) {
+                    printf("\nRespuesta del servidor: %s\n", respuesta->valuestring);
+                } else {
+                    printf("\nMensaje recibido: %s\n", response);
+                }
+                cJSON_Delete(json_response);
+            }
             printf("\nSelecciona una opción: ");
             fflush(stdout);
         }
@@ -70,98 +96,81 @@ void *recibir_mensajes(void *arg) {
 }
 
 // Función para listar usuarios conectados
-void listar_usuarios(int sock) {
+void listar_usuarios() {
     cJSON *json = cJSON_CreateObject();
-    cJSON_AddStringToObject(json, "accion", "listar_usuarios");
+    cJSON_AddStringToObject(json, "accion", "LISTA");
+    cJSON_AddStringToObject(json, "nombre_usuario", username);
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al solicitar listado de usuarios");
-        free(json_str);
-        return;
     }
     free(json_str);
-
-    char response[BUFFER_SIZE];
-    int len = recv(sock, response, sizeof(response) - 1, 0);
-    if (len > 0) {
-        response[len] = '\0';
-        printf("Usuarios conectados:\n%s\n", response);
-    } else {
-        printf("Error al recibir la lista de usuarios\n");
-    }
 }
 
 // Función para consultar información de un usuario
-void consultar_info_usuario(int sock) {
-    printf("Introduce el nombre del usuario: ");
+void consultar_info_usuario() {
+    printf("Introduce el nombre del usuario a consultar: ");
     char usuario_info[BUFFER_SIZE];
     fgets(usuario_info, BUFFER_SIZE, stdin);
     usuario_info[strcspn(usuario_info, "\n")] = 0;
 
     cJSON *json = cJSON_CreateObject();
-    cJSON_AddStringToObject(json, "accion", "info_usuario");
+    cJSON_AddStringToObject(json, "tipo", "MOSTRAR");
     cJSON_AddStringToObject(json, "usuario", usuario_info);
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al consultar información de usuario");
-        free(json_str);
-        return;
     }
     free(json_str);
-
-    char response[BUFFER_SIZE];
-    int len = recv(sock, response, sizeof(response) - 1, 0);
-    if (len > 0) {
-        response[len] = '\0';
-        printf("Información del usuario: %s\n", response);
-    } else {
-        printf("Error al recibir la información del usuario\n");
-    }
 }
 
 int main() {
     struct sockaddr_in server;
-    char message[BUFFER_SIZE];
-    char username[BUFFER_SIZE];
+    char direccion[BUFFER_SIZE];
 
+    // Crear socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == -1) {
         perror("No se pudo crear el socket");
         return 1;
     }
 
-    server.sin_addr.s_addr = inet_addr("192.168.229.71");
+    server.sin_addr.s_addr = inet_addr("192.168.229.71");  // IP del servidor
     server.sin_family = AF_INET;
     server.sin_port = htons(PORT);
 
+    // Conectar con el servidor
     if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
         perror("Error al conectar al servidor");
         return 1;
     }
 
+    // Registro del usuario
     printf("Introduce tu nombre de usuario: ");
     fgets(username, BUFFER_SIZE, stdin);
     username[strcspn(username, "\n")] = 0;
 
+    printf("Introduce tu dirección IP: ");
+    fgets(direccion, BUFFER_SIZE, stdin);
+    direccion[strcspn(direccion, "\n")] = 0;
+
     cJSON *json = cJSON_CreateObject();
-    cJSON_AddStringToObject(json, "accion", "REGISTRO");
+    cJSON_AddStringToObject(json, "tipo", "REGISTRO");
     cJSON_AddStringToObject(json, "usuario", username);
+    cJSON_AddStringToObject(json, "direccionIP", direccion);
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al registrar usuario");
-        free(json_str);
-        close(sock);
-        return 1;
+    } else {
+        printf("Usuario '%s' registrado correctamente.\n", username);
     }
     free(json_str);
-
-    printf("Usuario '%s' registrado correctamente.\n", username);
 
     // Crear hilo para recibir mensajes
     pthread_t thread_id;
@@ -170,81 +179,76 @@ int main() {
         return 1;
     }
 
+    // Menú interactivo
     while (1) {
         printf("\nOpciones:\n");
-        printf("1. Chatear con todos (broadcast)\n");
-        printf("2. Chatear con un usuario (mensaje privado)\n");
-        printf("3. Cambiar estado (ACTIVO, OCUPADO, INACTIVO)\n");
-        printf("4. Listar usuarios conectados\n");
+        printf("1. Chatear con todos\n");
+        printf("2. Chatear con un usuario (DM)\n");
+        printf("3. Cambiar estado\n");
+        printf("4. Listar usuarios\n");
         printf("5. Consultar información de un usuario\n");
         printf("6. Salir\n");
-
         printf("Selecciona una opción: ");
         int opcion;
-        scanf("%d", &opcion);
-        getchar();
+        if (scanf("%d", &opcion) != 1) {
+            printf("Entrada inválida.\n");
+            while (getchar() != '\n'); // limpiar buffer
+            continue;
+        }
+        getchar(); // limpiar salto de línea
 
         switch (opcion) {
-            case 1:
+            case 1: {
                 printf("Escribe tu mensaje: ");
-                fgets(message, BUFFER_SIZE, stdin);
-                message[strcspn(message, "\n")] = 0;
-                enviar_mensaje(sock, message, NULL);
+                char mensaje[BUFFER_SIZE];
+                fgets(mensaje, BUFFER_SIZE, stdin);
+                mensaje[strcspn(mensaje, "\n")] = 0;
+                enviar_mensaje(mensaje, NULL);
                 break;
-
+            }
             case 2: {
-                printf("A quién deseas enviar el mensaje? ");
+                printf("Introduce el destinatario: ");
                 char destinatario[BUFFER_SIZE];
                 fgets(destinatario, BUFFER_SIZE, stdin);
                 destinatario[strcspn(destinatario, "\n")] = 0;
+
                 printf("Escribe tu mensaje: ");
-                fgets(message, BUFFER_SIZE, stdin);
-                message[strcspn(message, "\n")] = 0;
-                enviar_mensaje(sock, message, destinatario);
+                char mensaje[BUFFER_SIZE];
+                fgets(mensaje, BUFFER_SIZE, stdin);
+                mensaje[strcspn(mensaje, "\n")] = 0;
+                enviar_mensaje(mensaje, destinatario);
                 break;
             }
-
-            case 3:
-                printf("Selecciona un estado: 1. ACTIVO 2. OCUPADO 3. INACTIVO\n");
-                int estado_opcion;
-                scanf("%d", &estado_opcion);
-                getchar();
-
-                if (estado_opcion == 1) {
-                    cambiar_estado(sock, "ACTIVO");
-                } else if (estado_opcion == 2) {
-                    cambiar_estado(sock, "OCUPADO");
-                } else if (estado_opcion == 3) {
-                    cambiar_estado(sock, "INACTIVO");
-                } else {
-                    printf("Opción inválida\n");
-                }
+            case 3: {
+                printf("Introduce tu nuevo estado (ACTIVO, OCUPADO, INACTIVO): ");
+                char estado[BUFFER_SIZE];
+                fgets(estado, BUFFER_SIZE, stdin);
+                estado[strcspn(estado, "\n")] = 0;
+                cambiar_estado(estado);
                 break;
-
+            }
             case 4:
-                listar_usuarios(sock);
+                listar_usuarios();
                 break;
-
             case 5:
-                consultar_info_usuario(sock);
+                consultar_info_usuario();
                 break;
+            case 6: {
+                // Enviar mensaje de salida
+                cJSON *json_exit = cJSON_CreateObject();
+                cJSON_AddStringToObject(json_exit, "tipo", "EXIT");
+                cJSON_AddStringToObject(json_exit, "usuario", username);
+                cJSON_AddStringToObject(json_exit, "estado", "");
+                char *json_str_exit = cJSON_PrintUnformatted(json_exit);
+                cJSON_Delete(json_exit);
+                send(sock, json_str_exit, strlen(json_str_exit), 0);
+                free(json_str_exit);
 
-            case 6:
                 printf("Saliendo...\n");
-                json = cJSON_CreateObject();
-                cJSON_AddStringToObject(json, "accion", "salir");
-                cJSON_AddStringToObject(json, "usuario", username);
-                json_str = cJSON_PrintUnformatted(json);
-                cJSON_Delete(json);
-
-                if (send(sock, json_str, strlen(json_str), 0) < 0) {
-                    perror("Error al notificar salida");
-                }
-                free(json_str);
-
                 close(sock);
+                pthread_cancel(thread_id);
                 return 0;
-
+            }
             default:
                 printf("Opción inválida\n");
                 break;
