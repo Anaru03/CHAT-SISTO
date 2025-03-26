@@ -12,6 +12,47 @@
 
 int sock;  // Socket global para uso en el hilo de recepción
 
+// Función para enviar un mensaje a un usuario específico o a todos
+void enviar_mensaje(int sock, const char *mensaje, const char *destinatario) {
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "accion", "enviar_mensaje");
+
+    if (destinatario) {
+        cJSON_AddStringToObject(json, "destinatario", destinatario);
+    }
+    cJSON_AddStringToObject(json, "mensaje", mensaje);
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    // Enviar mensaje
+    if (send(sock, json_str, strlen(json_str), 0) < 0) {
+        perror("Error al enviar mensaje");
+        free(json_str);
+        return;
+    }
+
+    free(json_str);
+}
+
+// Función para cambiar el estado del cliente
+void cambiar_estado(int sock, const char *nuevo_estado) {
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "accion", "cambiar_estado");
+    cJSON_AddStringToObject(json, "estado", nuevo_estado);
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    // Enviar solicitud para cambiar el estado
+    if (send(sock, json_str, strlen(json_str), 0) < 0) {
+        perror("Error al cambiar estado");
+        free(json_str);
+        return;
+    }
+
+    free(json_str);
+    printf("Estado cambiado a: %s\n", nuevo_estado);
+}
+
 // Hilo para recibir mensajes en tiempo real
 void *recibir_mensajes(void *arg) {
     char response[BUFFER_SIZE];
