@@ -28,15 +28,16 @@ void obtener_ip_local(char *ip_buffer) {
     }
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL)
-            continue;
-
+        if (ifa->ifa_addr == NULL) continue;
         if (ifa->ifa_addr->sa_family == AF_INET) { // Solo IPv4
             struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
             tmp_addr = &addr->sin_addr;
             inet_ntop(AF_INET, tmp_addr, ip_buffer, BUFFER_SIZE);
 
-            if (strncmp(ip_buffer, "127.", 4) != 0) {
+            // Solo aceptar IPs privadas (para evitar 127.0.0.1 o públicas)
+            if (strncmp(ip_buffer, "192.168.", 8) == 0 || 
+                strncmp(ip_buffer, "10.", 3) == 0 ||
+                strncmp(ip_buffer, "172.16.", 7) == 0) {
                 break;
             }
         }
@@ -119,6 +120,22 @@ void consultar_info_usuario() {
     free(json_str);
 }
 
+// Función para enviar mensaje de desconexión "EXIT"
+void enviar_exit() {
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "tipo", "EXIT");
+    cJSON_AddStringToObject(json, "usuario", username);
+    cJSON_AddStringToObject(json, "estado", "");
+
+    char *json_str = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+
+    if (send(sock, json_str, strlen(json_str), 0) < 0) {
+        perror("Error al enviar mensaje de desconexión");
+    }
+    free(json_str);
+}
+
 // Hilo para recibir mensajes
 void *recibir_mensajes(void *arg) {
     char response[BUFFER_SIZE];
@@ -161,7 +178,6 @@ void *recibir_mensajes(void *arg) {
     return NULL;
 }
 
-
 int main() {
     struct sockaddr_in server;
 
@@ -193,14 +209,13 @@ int main() {
     cJSON *json = cJSON_CreateObject();
     cJSON_AddStringToObject(json, "tipo", "REGISTRO");
     cJSON_AddStringToObject(json, "usuario", username);
-    cJSON_AddStringToObject(json, "direccionIP", ip_local);
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al registrar usuario");
     } else {
-        printf("Usuario '%s' registrado con IP '%s'.\n", username, ip_local);
+        printf("Usuario '%s' registrado correctamente.\n", username);
     }
     free(json_str);
 
@@ -261,13 +276,19 @@ int main() {
                 consultar_info_usuario();
                 break;
             case 6:
-                printf("Saliendo...\n");
+                // Enviar mensaje de desconexión
+                printf("Desconectando...\n");
+                enviar_exit();
+
+                // Cerrar el socket
                 close(sock);
+                // Terminar el hilo de recepción
                 pthread_cancel(thread_id);
+                pthread_join(thread_id, NULL);
+                printf("Desconectado del servidor.\n");
                 return 0;
             default:
-                printf("Opción inválida\n");
-                break;
+                printf("Opción no válida. Intenta de nuevo.\n");
         }
     }
 
