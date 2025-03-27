@@ -132,10 +132,23 @@ void *recibir_mensajes(void *arg) {
             if (!json_response) {
                 printf("\nMensaje recibido (formato incorrecto): %s\n", response);
             } else {
+                // Se pueden recibir mensajes con diferentes claves, se muestra lo recibido
                 cJSON *accion = cJSON_GetObjectItem(json_response, "accion");
                 cJSON *mensaje = cJSON_GetObjectItem(json_response, "mensaje");
-                if (accion && cJSON_IsString(accion) && mensaje && cJSON_IsString(mensaje)) {
-                    printf("\n[%s] %s\n", accion->valuestring, mensaje->valuestring);
+                cJSON *nombre_emisor = cJSON_GetObjectItem(json_response, "nombre_emisor");  // Obtener el nombre del emisor
+                cJSON *response_field = cJSON_GetObjectItem(json_response, "response");
+                cJSON *respuesta = cJSON_GetObjectItem(json_response, "respuesta");
+
+                if (accion && cJSON_IsString(accion) && mensaje && cJSON_IsString(mensaje) && nombre_emisor && cJSON_IsString(nombre_emisor)) {
+                    if (strcmp(accion->valuestring, "BROADCAST") == 0) {
+                        printf("\n[%s] %s: %s\n", accion->valuestring, nombre_emisor->valuestring, mensaje->valuestring);
+                    } else if (strcmp(accion->valuestring, "DM") == 0) {
+                        printf("\n[DM] %s -> %s: %s\n", nombre_emisor->valuestring, cJSON_GetObjectItem(json_response, "nombre_destinatario")->valuestring, mensaje->valuestring);
+                    }
+                } else if (response_field && cJSON_IsString(response_field)) {
+                    printf("\nRespuesta del servidor: %s\n", response_field->valuestring);
+                } else if (respuesta && cJSON_IsString(respuesta)) {
+                    printf("\nRespuesta del servidor: %s\n", respuesta->valuestring);
                 } else {
                     printf("\nMensaje recibido: %s\n", response);
                 }
@@ -147,6 +160,7 @@ void *recibir_mensajes(void *arg) {
     }
     return NULL;
 }
+
 
 int main() {
     struct sockaddr_in server;
