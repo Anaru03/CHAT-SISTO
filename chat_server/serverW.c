@@ -125,7 +125,6 @@ void *handle_client(void *arg) {
     memset(&client_info, 0, sizeof(Client));
     client_info.socket = client_socket;
     // Se asume que la IP se puede obtener del socket, pero en registro se recibe también
-    // Aquí podrías inicializarla usando getpeername o similar.
 
     while ((bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
         buffer[bytes_read] = '\0';
@@ -187,7 +186,7 @@ void *handle_client(void *arg) {
                     enviar_JSON(client_socket, resp);
                     cJSON_Delete(resp);
                 } else {
-                    // Registro exitoso
+                    // Registro exitoso: se asigna el estado inicial "ACTIVO"
                     strncpy(client_info.username, usuario->valuestring, sizeof(client_info.username)-1);
                     strncpy(client_info.ip, direccionIP->valuestring, sizeof(client_info.ip)-1);
                     strncpy(client_info.status, "ACTIVO", sizeof(client_info.status)-1);
@@ -218,22 +217,36 @@ void *handle_client(void *arg) {
                     enviar_JSON(client_socket, resp);
                     cJSON_Delete(resp);
                 } else {
-                    // Si el usuario coincide con el cliente registrado
-                    if (strcmp(usuario->valuestring, client_info.username) == 0) {
-                        if (strcmp(client_info.status, estado->valuestring) == 0) {
-                            cJSON *resp = cJSON_CreateObject();
-                            cJSON_AddStringToObject(resp, "respuesta", "ERROR");
-                            cJSON_AddStringToObject(resp, "razon", "ESTADO_YA_SELECCIONADO");
-                            enviar_JSON(client_socket, resp);
-                            cJSON_Delete(resp);
-                        } else {
-                            strncpy(client_info.status, estado->valuestring, sizeof(client_info.status)-1);
-                            // Actualizar en la lista de clientes (se asume que la dirección coincide)
-                            // Para mayor seguridad se podría buscar por username y actualizar
-                            cJSON *resp = cJSON_CreateObject();
-                            cJSON_AddStringToObject(resp, "respuesta", "OK");
-                            enviar_JSON(client_socket, resp);
-                            cJSON_Delete(resp);
+                    // Validar que el estado sea uno de los permitidos: "ACTIVO", "OCUPADO" o "INACTIVO"
+                    if (strcmp(estado->valuestring, "ACTIVO") != 0 &&
+                        strcmp(estado->valuestring, "OCUPADO") != 0 &&
+                        strcmp(estado->valuestring, "INACTIVO") != 0) {
+                        cJSON *resp = cJSON_CreateObject();
+                        cJSON_AddStringToObject(resp, "respuesta", "ERROR");
+                        cJSON_AddStringToObject(resp, "razon", "Estado inválido");
+                        enviar_JSON(client_socket, resp);
+                        cJSON_Delete(resp);
+                    } else {
+                        // Si el usuario coincide con el cliente registrado, actualizar globalmente
+                        if (strcmp(usuario->valuestring, client_info.username) == 0) {
+                            Client *cl = find_client_by_username(client_info.username);
+                            if (cl) {
+                                if (strcmp(cl->status, estado->valuestring) == 0) {
+                                    cJSON *resp = cJSON_CreateObject();
+                                    cJSON_AddStringToObject(resp, "respuesta", "ERROR");
+                                    cJSON_AddStringToObject(resp, "razon", "ESTADO_YA_SELECCIONADO");
+                                    enviar_JSON(client_socket, resp);
+                                    cJSON_Delete(resp);
+                                } else {
+                                    strncpy(cl->status, estado->valuestring, sizeof(cl->status)-1);
+                                    // También actualizamos la copia local
+                                    strncpy(client_info.status, estado->valuestring, sizeof(client_info.status)-1);
+                                    cJSON *resp = cJSON_CreateObject();
+                                    cJSON_AddStringToObject(resp, "respuesta", "OK");
+                                    enviar_JSON(client_socket, resp);
+                                    cJSON_Delete(resp);
+                                }
+                            }
                         }
                     }
                 }

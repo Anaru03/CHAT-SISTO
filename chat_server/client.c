@@ -5,30 +5,59 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "cJSON.h"
+#include <netdb.h>
+#include <netinet/in.h>
+#include <ifaddrs.h>
+#include <cjson/cJSON.h>
 
 #define PORT 50213
 #define BUFFER_SIZE 1024
 
-int sock;  // Socket global para uso en el hilo de recepción
-char username[BUFFER_SIZE];  // Nombre de usuario global
+int sock;
+char username[BUFFER_SIZE];
+char ip_local[BUFFER_SIZE];
 
-// Función para enviar un mensaje (broadcast o directo)
+// Función para obtener la IP local del cliente
+void obtener_ip_local(char *ip_buffer) {
+    struct ifaddrs *ifaddr, *ifa;
+    void *tmp_addr;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("Error obteniendo dirección IP");
+        exit(EXIT_FAILURE);
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        if (ifa->ifa_addr->sa_family == AF_INET) { // Solo IPv4
+            struct sockaddr_in *addr = (struct sockaddr_in *)ifa->ifa_addr;
+            tmp_addr = &addr->sin_addr;
+            inet_ntop(AF_INET, tmp_addr, ip_buffer, BUFFER_SIZE);
+
+            if (strncmp(ip_buffer, "127.", 4) != 0) {
+                break;
+            }
+        }
+    }
+
+    freeifaddrs(ifaddr);
+}
+
+// Función para enviar un mensaje
 void enviar_mensaje(const char *mensaje, const char *destinatario) {
     cJSON *json = cJSON_CreateObject();
-
+    
     if (destinatario == NULL || strlen(destinatario) == 0) {
-        // Mensaje de broadcast
         cJSON_AddStringToObject(json, "accion", "BROADCAST");
-        cJSON_AddStringToObject(json, "nombre_emisor", username);
-        cJSON_AddStringToObject(json, "mensaje", mensaje);
     } else {
-        // Mensaje directo (DM)
         cJSON_AddStringToObject(json, "accion", "DM");
-        cJSON_AddStringToObject(json, "nombre_emisor", username);
         cJSON_AddStringToObject(json, "nombre_destinatario", destinatario);
-        cJSON_AddStringToObject(json, "mensaje", mensaje);
     }
+    
+    cJSON_AddStringToObject(json, "nombre_emisor", username);
+    cJSON_AddStringToObject(json, "mensaje", mensaje);
 
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
@@ -36,7 +65,6 @@ void enviar_mensaje(const char *mensaje, const char *destinatario) {
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al enviar mensaje");
     }
-
     free(json_str);
 }
 
@@ -56,43 +84,6 @@ void cambiar_estado(const char *nuevo_estado) {
     }
 
     free(json_str);
-}
-
-// Hilo para recibir mensajes
-void *recibir_mensajes(void *arg) {
-    char response[BUFFER_SIZE];
-
-    while (1) {
-        int len = recv(sock, response, sizeof(response) - 1, 0);
-        if (len > 0) {
-            response[len] = '\0';
-
-            cJSON *json_response = cJSON_Parse(response);
-            if (!json_response) {
-                printf("\nMensaje recibido (formato incorrecto): %s\n", response);
-            } else {
-                // Se pueden recibir mensajes con diferentes claves, se muestra lo recibido
-                cJSON *accion = cJSON_GetObjectItem(json_response, "accion");
-                cJSON *mensaje = cJSON_GetObjectItem(json_response, "mensaje");
-                cJSON *response_field = cJSON_GetObjectItem(json_response, "response");
-                cJSON *respuesta = cJSON_GetObjectItem(json_response, "respuesta");
-
-                if (accion && cJSON_IsString(accion) && mensaje && cJSON_IsString(mensaje)) {
-                    printf("\n[%s] %s\n", accion->valuestring, mensaje->valuestring);
-                } else if (response_field && cJSON_IsString(response_field)) {
-                    printf("\nRespuesta del servidor: %s\n", response_field->valuestring);
-                } else if (respuesta && cJSON_IsString(respuesta)) {
-                    printf("\nRespuesta del servidor: %s\n", respuesta->valuestring);
-                } else {
-                    printf("\nMensaje recibido: %s\n", response);
-                }
-                cJSON_Delete(json_response);
-            }
-            printf("\nSelecciona una opción: ");
-            fflush(stdout);
-        }
-    }
-    return NULL;
 }
 
 // Función para listar usuarios conectados
@@ -128,9 +119,37 @@ void consultar_info_usuario() {
     free(json_str);
 }
 
+// Hilo para recibir mensajes
+void *recibir_mensajes(void *arg) {
+    char response[BUFFER_SIZE];
+
+    while (1) {
+        int len = recv(sock, response, sizeof(response) - 1, 0);
+        if (len > 0) {
+            response[len] = '\0';
+
+            cJSON *json_response = cJSON_Parse(response);
+            if (!json_response) {
+                printf("\nMensaje recibido (formato incorrecto): %s\n", response);
+            } else {
+                cJSON *accion = cJSON_GetObjectItem(json_response, "accion");
+                cJSON *mensaje = cJSON_GetObjectItem(json_response, "mensaje");
+                if (accion && cJSON_IsString(accion) && mensaje && cJSON_IsString(mensaje)) {
+                    printf("\n[%s] %s\n", accion->valuestring, mensaje->valuestring);
+                } else {
+                    printf("\nMensaje recibido: %s\n", response);
+                }
+                cJSON_Delete(json_response);
+            }
+            printf("\nSelecciona una opción: ");
+            fflush(stdout);
+        }
+    }
+    return NULL;
+}
+
 int main() {
     struct sockaddr_in server;
-    char direccion[BUFFER_SIZE];
 
     // Crear socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -149,26 +168,25 @@ int main() {
         return 1;
     }
 
+    // Obtener IP local automáticamente
+    obtener_ip_local(ip_local);
+
     // Registro del usuario
     printf("Introduce tu nombre de usuario: ");
     fgets(username, BUFFER_SIZE, stdin);
     username[strcspn(username, "\n")] = 0;
 
-    printf("Introduce tu dirección IP: ");
-    fgets(direccion, BUFFER_SIZE, stdin);
-    direccion[strcspn(direccion, "\n")] = 0;
-
     cJSON *json = cJSON_CreateObject();
     cJSON_AddStringToObject(json, "tipo", "REGISTRO");
     cJSON_AddStringToObject(json, "usuario", username);
-    cJSON_AddStringToObject(json, "direccionIP", direccion);
+    cJSON_AddStringToObject(json, "direccionIP", ip_local);
     char *json_str = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
     if (send(sock, json_str, strlen(json_str), 0) < 0) {
         perror("Error al registrar usuario");
     } else {
-        printf("Usuario '%s' registrado correctamente.\n", username);
+        printf("Usuario '%s' registrado con IP '%s'.\n", username, ip_local);
     }
     free(json_str);
 
@@ -192,69 +210,52 @@ int main() {
         int opcion;
         if (scanf("%d", &opcion) != 1) {
             printf("Entrada inválida.\n");
-            while (getchar() != '\n'); // limpiar buffer
+            while (getchar() != '\n');
             continue;
         }
-        getchar(); // limpiar salto de línea
+        getchar();
 
         switch (opcion) {
-            case 1: {
+            case 1:
                 printf("Escribe tu mensaje: ");
                 char mensaje[BUFFER_SIZE];
                 fgets(mensaje, BUFFER_SIZE, stdin);
                 mensaje[strcspn(mensaje, "\n")] = 0;
                 enviar_mensaje(mensaje, NULL);
                 break;
-            }
-            case 2: {
+            case 2:
                 printf("Introduce el destinatario: ");
                 char destinatario[BUFFER_SIZE];
                 fgets(destinatario, BUFFER_SIZE, stdin);
                 destinatario[strcspn(destinatario, "\n")] = 0;
-
                 printf("Escribe tu mensaje: ");
-                char mensaje[BUFFER_SIZE];
                 fgets(mensaje, BUFFER_SIZE, stdin);
                 mensaje[strcspn(mensaje, "\n")] = 0;
                 enviar_mensaje(mensaje, destinatario);
                 break;
-            }
-            case 3: {
-                printf("Introduce tu nuevo estado (ACTIVO, OCUPADO, INACTIVO): ");
+            case 3:
+                printf("Introduce tu nuevo estado: ");
                 char estado[BUFFER_SIZE];
                 fgets(estado, BUFFER_SIZE, stdin);
                 estado[strcspn(estado, "\n")] = 0;
                 cambiar_estado(estado);
                 break;
-            }
             case 4:
                 listar_usuarios();
                 break;
             case 5:
                 consultar_info_usuario();
                 break;
-            case 6: {
-                // Enviar mensaje de salida
-                cJSON *json_exit = cJSON_CreateObject();
-                cJSON_AddStringToObject(json_exit, "tipo", "EXIT");
-                cJSON_AddStringToObject(json_exit, "usuario", username);
-                cJSON_AddStringToObject(json_exit, "estado", "");
-                char *json_str_exit = cJSON_PrintUnformatted(json_exit);
-                cJSON_Delete(json_exit);
-                send(sock, json_str_exit, strlen(json_str_exit), 0);
-                free(json_str_exit);
-
+            case 6:
                 printf("Saliendo...\n");
                 close(sock);
                 pthread_cancel(thread_id);
                 return 0;
-            }
             default:
                 printf("Opción inválida\n");
                 break;
         }
     }
 
-    close(sock);
     return 0;
 }
