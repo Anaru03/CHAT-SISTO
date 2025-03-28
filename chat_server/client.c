@@ -10,7 +10,7 @@
 #include <ifaddrs.h>
 #include <cjson/cJSON.h>
 
-#define PORT 50213
+#define PORT 50216
 #define BUFFER_SIZE 1024
 
 int sock;
@@ -188,7 +188,7 @@ int main() {
         return 1;
     }
 
-    server.sin_addr.s_addr = inet_addr("192.168.229.71");  // IP del servidor
+    server.sin_addr.s_addr = inet_addr("192.168.0.10");  // IP del servidor
     server.sin_family = AF_INET;
     server.sin_port = htons(PORT);
 

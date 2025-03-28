@@ -266,6 +266,7 @@ void *handle_client(void *arg) {
                         cJSON_AddStringToObject(resp, "tipo", "MOSTRAR");
                         cJSON_AddStringToObject(resp, "usuario", dest->username);
                         cJSON_AddStringToObject(resp, "estado", dest->status);
+                        cJSON_AddStringToObject(resp, "ip", dest->ip);
                         enviar_JSON(client_socket, resp);
                         cJSON_Delete(resp);
                     } else {
@@ -320,7 +321,7 @@ void *handle_client(void *arg) {
                 }
             }
             else if (strcmp(accion->valuestring, "LISTA") == 0) {
-                // Se envía un listado de usuarios conectados
+                // Se envía un listado de usuarios conectados con su IP y status
 #ifdef _WIN32
                     WaitForSingleObject(clients_mutex, INFINITE);
 #else
@@ -328,7 +329,11 @@ void *handle_client(void *arg) {
 #endif
                 cJSON *lista = cJSON_CreateArray();
                 for (int i = 0; i < client_count; i++) {
-                    cJSON_AddItemToArray(lista, cJSON_CreateString(clients[i].username));
+                    cJSON *user_obj = cJSON_CreateObject();
+                    cJSON_AddStringToObject(user_obj, "nombre_usuario", clients[i].username);
+                    cJSON_AddStringToObject(user_obj, "ip", clients[i].ip);
+                    cJSON_AddStringToObject(user_obj, "status", clients[i].status);
+                    cJSON_AddItemToArray(lista, user_obj);
                 }
 #ifdef _WIN32
                     ReleaseMutex(clients_mutex);
