@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <stdio.h> 
 #ifdef _WIN32
     #include <winsock2.h>
     #include <ws2tcpip.h>
@@ -34,6 +34,34 @@ int client_count = 0;
     HANDLE clients_mutex = NULL;
 #else
     pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
+// Declaración adelantada para evitar el warning en timer_thread
+Client* find_client_by_username(const char* username);
+
+// Función timer que espera 1 minuto y cambia el estado del cliente a "INACTIVO"
+#ifdef _WIN32
+DWORD WINAPI timer_thread(LPVOID arg) {
+    char* username = (char*) arg;
+    Sleep(60000);  // Espera 60 segundos
+    Client *cl = find_client_by_username(username);
+    if(cl) {
+         strncpy(cl->status, "INACTIVO", sizeof(cl->status)-1);
+    }
+    free(username);
+    return 0;
+}
+#else
+void *timer_thread(void *arg) {
+    char* username = (char*) arg;
+    sleep(60);  // Espera 60 segundos
+    Client *cl = find_client_by_username(username);
+    if(cl) {
+         strncpy(cl->status, "INACTIVO", sizeof(cl->status)-1);
+    }
+    free(username);
+    return NULL;
+}
 #endif
 
 // Funciones de manejo de clientes
@@ -196,6 +224,17 @@ void *handle_client(void *arg) {
                     cJSON_AddStringToObject(resp, "response", "OK");
                     enviar_JSON(client_socket, resp);
                     cJSON_Delete(resp);
+                    
+                    // Agregar timer de 1 minuto para cambiar estado a INACTIVO
+#ifdef _WIN32
+                    DWORD threadId;
+                    char *userForTimer = _strdup(client_info.username);
+                    HANDLE hTimer = CreateThread(NULL, 0, timer_thread, userForTimer, 0, &threadId);
+#else
+                    pthread_t timer_tid;
+                    char *userForTimer = strdup(client_info.username);
+                    pthread_create(&timer_tid, NULL, timer_thread, userForTimer);
+#endif
                 }
             }
         }
@@ -330,7 +369,7 @@ void *handle_client(void *arg) {
                 cJSON *lista = cJSON_CreateArray();
                 for (int i = 0; i < client_count; i++) {
                     cJSON *user_obj = cJSON_CreateObject();
-                    cJSON_AddStringToObject(user_obj, "nombre_usuario", clients[i].username);
+                    cJSON_AddStringToObject(user_obj, "usuarios", clients[i].username);
                     cJSON_AddStringToObject(user_obj, "ip", clients[i].ip);
                     cJSON_AddStringToObject(user_obj, "status", clients[i].status);
                     cJSON_AddItemToArray(lista, user_obj);
