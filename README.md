@@ -2,7 +2,7 @@
 
 ## Universidad del Valle de Guatemala  
 **Curso:** Sistemas Operativos  
-**Docentes:** Juan Luis García, Sebastián Galindo, Juan Carlos Canteo  
+**Docente:** Juan Carlos Canteo  
 
 ### Descripción
 Este proyecto es una implementación de un sistema de chat en C, basado en el trabajo original de Bob Dugan y Erik Véliz (2006). El objetivo es reforzar conocimientos sobre procesos, threads, concurrencia y comunicación entre procesos mediante sockets en Linux.
@@ -55,3 +55,4 @@ $ ./client
 **Autores:** 
 - Isabella Miralles - [Isabella-22293](https://github.com/Isabella-22293) 
 - Ruth de León - [Anaru03](https://github.com/Anaru03) 
+- Año de creación: marzo 2025
